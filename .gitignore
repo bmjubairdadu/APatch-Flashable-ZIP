@@ -1,0 +1,19 @@
+# local build inputs (binaries are NOT committed)
+APatch.apk
+dist/
+*.zip
+!docs/
+fp_install/
+ap_debug.log
+recovery.log
+recovery_*.log
+tools/__pycache__/
+GPL_BODY.txt
+LICENSE_TMP.txt
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~\

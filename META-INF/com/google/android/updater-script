@@ -1,0 +1,5 @@
+# APatch updater script
+# This ZIP uses Magisk-style update-binary; updater-script is kept minimal.
+# The real installation logic is in META-INF/com/google/android/update-binary
+# which selects InstallAP.sh / PatchOnly.sh / UninstallAP.sh by ZIP filename.
+

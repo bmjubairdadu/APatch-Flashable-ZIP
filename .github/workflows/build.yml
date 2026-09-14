@@ -1,0 +1,58 @@
+name: Build ZIPs
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch official APatch APK
+        run: |
+          curl -sL -o APatch.apk https://github.com/bmax121/APatch/releases/download/11224/APatch_11224_9a63e0f_HEAD-release-signed.apk
+          sha256sum APatch.apk
+      - name: Build flashable ZIPs
+        run: |
+          if [ -n "${{ github.ref_name }}" ]; then
+            python tools/build.py --tag "${{ github.ref_name }}"
+          else
+            python tools/build.py
+          fi
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flashable-zips
+          path: dist/*
+      - name: Extract release notes from CHANGELOG
+        run: |
+          python - <<'EOF'
+          import re
+          tag = "${{ github.ref_name }}"
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          parts = re.split(r"(?m)^## \[", text)
+          body = ""
+          for p in parts[1:]:
+              if p.startswith(tag + "]"):
+                  body = "## [" + p.rstrip() + "\n"
+                  break
+          if not body:
+              body = "Release %s\n" % tag
+          open("release_notes.md", "w", encoding="utf-8").write(body)
+          print(body)
+          EOF
+      - name: Attach to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: release_notes.md
