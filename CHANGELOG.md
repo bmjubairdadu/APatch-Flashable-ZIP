@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Versioning: `vX.Y-kpA.B.C` where `X.Y` is this installer and `A.B.C`
 is the embedded KernelPatch.
 
+## [v1.2-kp0.13.8] — 2026-09-15 — freeze fix + safe switching 🔄
+
+### Fixed
+- 🔄 **Manager-open freeze/reboot:** APatch manager on a FolkPatch-patched
+  kernel (or with FolkPatch `/data/adb/fp` remnants) can freeze and reboot
+  the phone. The installer now moves `/data/adb/fp` aside (`fp.bak-apatch`)
+  and migrates invalid `package_config` files (bare names → backup + fresh
+  empty file the Manager fills with real CSV grants).
+- 🔄 **Cross-tool abort now names FolkPatch:** a foreign patch with key
+  `su` but foreign kpimg tells you exactly how to switch (FolkPatch
+  Uninstaller → reboot → uninstall app → reboot → flash APatch).
+- 🔄 No more pre-written bare-name grants (invalid for APatch's strict CSV
+  parser — caused kernel log spam); grants happen in the Manager UI.
+- 🔄 Fixed stale `/dev/tmp/fp_install` fallback paths in PatchOnly/Uninstaller.
+
 ## [v1.1-kp0.13.8] — 2026-09-15 — bootloop guards 🛡️
 
 A kernel patched by one tool must never be re-patched or live-unpatched

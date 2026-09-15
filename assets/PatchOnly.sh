@@ -6,7 +6,7 @@ OUTFD="$2"
 BB="$BBBIN"
 if [ -z "$BB" ]; then BB="busybox"; fi
 WORK="$INSTALLER"
-if [ -z "$WORK" ]; then WORK="/dev/tmp/fp_install"; fi
+if [ -z "$WORK" ]; then WORK="/dev/tmp/ap_install"; fi
 KPTOOLS=""
 for k in "$WORK/lib/arm64-v8a/libkptools.so" "$WORK/kptools" "$WORK/assets/kptools"; do
   if [ -f "$k" ]; then

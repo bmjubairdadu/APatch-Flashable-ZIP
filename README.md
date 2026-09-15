@@ -21,9 +21,9 @@ Flash the Installer ZIP in custom recovery and get root immediately on reboot �
 
 | File | Use it when… |
 |---|---|
-| `APatch-v1.1-kp0.13.8-Recovery-Installer.zip` | You want root now: flash in recovery, reboot, done ✅ |
-| `APatch-v1.1-kp0.13.8-Boot-Patcher.zip` | You prefer fastboot: patch a stock `boot.img` on sdcard, flash from PC |
-| `APatch-v1.1-kp0.13.8-Uninstaller.zip` | You want to unroot: restores the stock kernel backup |
+| `APatch-v1.2-kp0.13.8-Recovery-Installer.zip` | You want root now: flash in recovery, reboot, done ✅ |
+| `APatch-v1.2-kp0.13.8-Boot-Patcher.zip` | You prefer fastboot: patch a stock `boot.img` on sdcard, flash from PC |
+| `APatch-v1.2-kp0.13.8-Uninstaller.zip` | You want to unroot: restores the stock kernel backup |
 | `SHA256SUMS.txt` | Verify downloads before flashing |
 
 All three ZIPs (plus checksums) are attached to every
@@ -34,6 +34,12 @@ always install that copy, never a random APK.
 > ⚠️ **FolkPatch (`me.yuki.folk`) and APatch (`me.bmax.apatch`) cannot coexist.**
 > Both use `/data/adb/apd`, `/data/adb/ap/`, and syscall 45. Uninstall one
 > fully (Uninstaller ZIP + reboot) before flashing the other.
+>
+> **Switching FolkPatch → APatch (safe order):**
+> 1. Flash FolkPatch Uninstaller → reboot (stock kernel).
+> 2. Uninstall the FolkPatch app → reboot again.
+> 3. Flash APatch Installer v1.2+ (its guard aborts if anything foreign remains).
+> Skipping 1–2 and flashing over a FolkPatch kernel = freeze/bootloop risk.
 
 ---
 
@@ -55,7 +61,7 @@ patching those is invalid and unsupported).
 
 ## Method 1 — Recovery Installer (recommended, no PC)
 
-1. Copy `APatch-v1.1-kp0.13.8-Recovery-Installer.zip` to sdcard.
+1. Copy `APatch-v1.2-kp0.13.8-Recovery-Installer.zip` to sdcard.
 2. Boot into recovery → **Install** → select the ZIP (or `adb sideload` it).
 3. The installer will:
    - Detect your current boot partition and slot automatically
@@ -77,7 +83,7 @@ patching those is invalid and unsupported).
 
 1. Get your stock `boot.img` (firmware package or `adb pull /dev/block/by-name/boot`).
 2. Put it on sdcard as `APatch-stock-boot.img`.
-3. Flash `APatch-v1.1-kp0.13.8-Boot-Patcher.zip` in recovery.
+3. Flash `APatch-v1.2-kp0.13.8-Boot-Patcher.zip` in recovery.
    - Touches **no** partition. Output: `APatch-patched-boot.img` on sdcard.
 4. From PC:
    ```sh
@@ -93,7 +99,7 @@ patching those is invalid and unsupported).
 
 ## Uninstall / unroot
 
-Flash `APatch-v1.1-kp0.13.8-Uninstaller.zip` in recovery. It restores the
+Flash `APatch-v1.2-kp0.13.8-Uninstaller.zip` in recovery. It restores the
 stock backup if found, otherwise live-unpatches the kernel, and always
 removes the root daemon (`/data/adb/apd`, `/data/adb/ap/`).
 
@@ -170,7 +176,7 @@ symlinks to it, `busybox`/`kptools` are copies, `su_path` defaults to
 No binaries are committed. The build extracts everything from the official APK:
 
 ```sh
-python tools/build.py --tag v1.1-kp0.13.8
+python tools/build.py --tag v1.2-kp0.13.8
 # outputs: dist/*.zip + SHA256SUMS.txt (all git-ignored)
 ```
 

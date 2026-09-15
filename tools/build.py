@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build Magisk-style APatch recovery ZIPs from the official APK.
 
-Downloads nothing by default: uses FolkPatch.apk placed next to this repo
+Downloads nothing by default: uses APatch.apk placed next to this repo
 (see APK_URL below), extracts busybox/kptools/kpimg, packs 3 ZIPs + SHA256SUMS.
 
 Usage:
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--apk", default=os.path.join(ROOT, "APatch.apk"))
     ap.add_argument("--out", default=os.path.join(ROOT, "dist"))
-    ap.add_argument("--version", default="1.1")
+    ap.add_argument("--version", default="1.2")
     ap.add_argument("--kp", default="0.13.8")
     ap.add_argument("--tag", default="",
                     help="Release tag like v1.0-kp0.13.8; drives ZIP names + README.txt")

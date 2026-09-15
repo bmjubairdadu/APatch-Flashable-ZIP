@@ -197,7 +197,7 @@ valid_stock_img() {
 
 ui_print "****************************"
 ui_print " APatch Recovery Installer"
-ui_print " v1.1 / KP-0.13.8"
+ui_print " v1.2 / KP-0.13.8"
 ui_print " Universal boot-only patcher"
 ui_print "****************************"
 
@@ -468,10 +468,24 @@ if grep -qi "patched=true" "$WORK/vorig.log"; then
       ui_print "- WARNING: Could not clean existing patch, continuing anyway"
     fi
   else
+    _fsk=$(run_grep -i "^superkey=" "$WORK/vorig.log" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d ' \t\r\n')
     ui_print "- ERROR: kernel was patched by ANOTHER tool/version (not this ZIP)."
+    case "$_fsk" in
+      su)
+        ui_print "- It uses key 'su' but a FOREIGN kpimg (likely FolkPatch)."
+        ui_print "- FolkPatch and APatch share /data/adb/apd: mixing them"
+        ui_print "  freezes/reboots the phone. Switch cleanly:"
+        ui_print "  1) FolkPatch Uninstaller ZIP -> reboot (stock kernel),"
+        ui_print "  2) uninstall the FolkPatch app -> reboot again,"
+        ui_print "  3) then flash this APatch ZIP."
+        ;;
+      *)
+        ui_print "- It uses a custom superkey ('$_fsk'): legacy/FolkPatch patch."
+        ui_print "- Restore STOCK boot.img first (Uninstaller ZIP with a valid"
+        ui_print "  stock backup, or fastboot flash stock), then flash this ZIP."
+        ;;
+    esac
     ui_print "- Re-patching it with this kptools/kpimg can BOOTLOOP the device."
-    ui_print "- Restore STOCK boot.img first (Uninstaller ZIP with a valid"
-    ui_print "  stock backup, or fastboot flash stock), then flash this ZIP."
     abort "foreign patch detected - refusing to re-patch (bootloop guard)"
   fi
 fi
@@ -673,6 +687,13 @@ fi
 mkdir -p /data/adb/ap/bin /data/adb/ap/log /data/adb/post-fs-data.d 2>/dev/null
 DAEMON_OK=0
 if [ -d /data/adb ]; then
+  # Cross-tool migration (freeze guard): FolkPatch userspace must never mix
+  # with APatch (shared /data/adb/apd + syscall 45). Move it aside
+  # non-destructively so the manager's first launch starts clean.
+  if [ -e /data/adb/fp ] && [ ! -e /data/adb/fp.bak-apatch ]; then
+    mv -f /data/adb/fp /data/adb/fp.bak-apatch 2>/dev/null
+    ui_print "- Moved FolkPatch-only /data/adb/fp aside (fp.bak-apatch)"
+  fi
   # Official installApatch() rule: apd is the hub binary; magiskpolicy and
   # resetprop are SYMLINKS to apd (ln -s), not copies. No extra daemons.
   if [ -n "$APD_SRC" ]; then
@@ -688,17 +709,25 @@ if [ -d /data/adb ]; then
   chmod 755 /data/adb/ap/bin/busybox /data/adb/ap/bin/kptools 2>/dev/null
   # su_path: app writes LEGACY path (/system/bin/su) when empty; do the same.
   if [ ! -s /data/adb/ap/su_path ]; then echo "/system/bin/su" > /data/adb/ap/su_path 2>/dev/null; fi
-  # Pre-authorize the real Manager package (me.bmax.apatch, official
-  # namespace) and shell so root works right after reboot.
-  touch /data/adb/ap/package_config 2>/dev/null
-  for pc in /data/adb/ap/package_config; do
-    mkdir -p "$(dirname "$pc")" 2>/dev/null
-    for pkg in me.bmax.apatch com.android.shell; do
-      echo "$pkg" >> "$pc" 2>/dev/null
-    done
-    if [ "$BB_OK" = "1" ]; then "$BB" sort -u "$pc" -o "$pc" 2>/dev/null; fi
-    chmod 644 "$pc" 2>/dev/null
-  done
+  # package_config migration (freeze guard): APatch's kernel parser requires
+  # CSV lines (pkg,exclude,allow,uid,to_uid,sctx). Bare package names
+  # (written by old ZIPs/FolkPatch) are invalid and only spam the kernel log,
+  # so move such a file aside and start empty; the Manager writes real grants
+  # when you allow apps in its Superuser page. A valid CSV file is kept.
+  _pc=/data/adb/ap/package_config
+  touch "$_pc" 2>/dev/null
+  _bad=0
+  if [ -s "$_pc" ]; then
+    if run_grep -qv -e "," -e "^#" -e "^$" "$_pc" 2>/dev/null; then
+      _bad=1
+    fi
+  fi
+  if [ "$_bad" = "1" ]; then
+    run_cp -f "$_pc" "$_pc.bak-folkpatch" 2>/dev/null
+    : > "$_pc" 2>/dev/null
+    ui_print "- Old-format package_config moved aside (.bak-folkpatch)"
+  fi
+  chmod 644 "$_pc" 2>/dev/null
 
   if [ -s "$BKDIR/stock-$TARGET_KIND$SLOT.img" ]; then
     run_cp -f "$BKDIR/stock-$TARGET_KIND$SLOT.img" /data/adb/ap/ori.img 2>/dev/null
@@ -771,7 +800,7 @@ ui_print " Bootloop? Flash Uninstaller ZIP or restore stock backup."
 ui_print "****************************"
 # Persistent flash report on sdcard (survives reboot; user can send it).
 {
-  echo "APatch v1.1 flash report"
+  echo "APatch v1.2 flash report"
   echo "date: $(date 2>/dev/null)"
   echo "target: $TARGET_KIND ($TARGET)"
   echo "slot: $SLOT"
