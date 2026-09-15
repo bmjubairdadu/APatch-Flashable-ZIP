@@ -162,9 +162,42 @@ if [ ! -x "$KPTOOLS" ]; then
 fi
 if [ ! -f "$KPIMG" ]; then abort "kpimg missing"; fi
 
+# Bootloop guard helpers.
+# A kernel patched by ANOTHER tool (different kpimg/superkey) must NEVER be
+# re-patched or unpatched with our kptools: cross-version patch metadata is
+# incompatible and produces a non-booting kernel. Detect and refuse instead.
+OUR_KPCT=""
+is_our_patch() {
+  # $1 = path to a "kptools -l" log of the kernel.
+  # True only if plaintext superkey is exactly "su" AND the embedded kpimg
+  # compile_time matches OUR kpimg (proves same tool + same version).
+  if [ -z "$OUR_KPCT" ]; then
+    OUR_KPCT=$(kp_run -l -k "$KPIMG" 2>/dev/null | run_grep -i "compile_time" | head -n 1 | cut -d= -f2- | tr -s ' ' | tr -d '\t\r\n')
+  fi
+  _sk=$(run_grep -i "^superkey=" "$1" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d ' \t\r\n')
+  _ct=$(run_grep -i "compile_time" "$1" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -s ' ' | tr -d '\t\r\n')
+  if [ "$_sk" = "su" ] && [ -n "$_ct" ] && [ -n "$OUR_KPCT" ] && [ "$_ct" = "$OUR_KPCT" ]; then return 0; fi
+  return 1
+}
+valid_stock_img() {
+  # Returns 0 only if $1 unpacks AND its kernel reports patched=false.
+  # Never trust a filename: v1.0 could save a patched image as "stock".
+  rm -rf "$WORK/vstock" 2>/dev/null
+  mkdir -p "$WORK/vstock" 2>/dev/null
+  run_cp -f "$1" "$WORK/vstock/boot.img" 2>/dev/null || { rm -rf "$WORK/vstock" 2>/dev/null; return 1; }
+  if ( cd "$WORK/vstock" 2>/dev/null && kp_run unpack boot.img >"$WORK/vstock.log" 2>&1 ) && [ -f "$WORK/vstock/kernel" ]; then
+    if kp_run -i "$WORK/vstock/kernel" -l 2>/dev/null | run_grep -qi "patched=false"; then
+      rm -rf "$WORK/vstock" 2>/dev/null
+      return 0
+    fi
+  fi
+  rm -rf "$WORK/vstock" 2>/dev/null
+  return 1
+}
+
 ui_print "****************************"
 ui_print " APatch Recovery Installer"
-ui_print " v1.0 / KP-0.13.8"
+ui_print " v1.1 / KP-0.13.8"
 ui_print " Universal boot-only patcher"
 ui_print "****************************"
 
@@ -336,11 +369,21 @@ case "$_BAT" in
   *) if [ "$_BAT" -lt 25 ]; then ui_print "- WARNING: battery ${_BAT}% - charge above 50% before flashing!"; fi ;;
 esac
 
-# Try to use stock backup if available for a clean patch
+# Try to use stock backup if available for a clean patch.
+# Bootloop guard: ONLY reuse a backup that is proven stock (unpacks + says
+# patched=false). A misnamed patched file must never become the patch source
+# OR overwrite a good backup. Validate first, ask nothing, abort loudly.
 CLEAN_SOURCE=0
 if [ -s "$BKDIR/stock-$TARGET_KIND$SLOT.img" ]; then
-  ui_print "- Using existing stock backup for clean patch"
-  run_cp -f "$BKDIR/stock-$TARGET_KIND$SLOT.img" "$WORK/boot.img" 2>/dev/null && CLEAN_SOURCE=1
+  if valid_stock_img "$BKDIR/stock-$TARGET_KIND$SLOT.img"; then
+    ui_print "- Using existing stock backup for clean patch"
+    run_cp -f "$BKDIR/stock-$TARGET_KIND$SLOT.img" "$WORK/boot.img" 2>/dev/null && CLEAN_SOURCE=1
+  else
+    ui_print "- ERROR: '$BKDIR/stock-$TARGET_KIND$SLOT.img' is NOT stock (already patched?)."
+    ui_print "- Keeping your partitions untouched. Restore a real stock boot.img"
+    ui_print "  as that file, or delete it so a fresh backup is taken."
+    abort "saved 'stock' backup is not stock (bootloop guard)"
+  fi
 fi
 
 if [ "$CLEAN_SOURCE" = "0" ]; then
@@ -372,15 +415,24 @@ if kp_run -i kernel -l 2>/dev/null | run_grep -qi "patched=true"; then
   ui_print "- NOTE: kernel already patched; re-patching with same key"
 fi
 
-# Save stock backup
+# Save stock backup (ONLY from proven-stock running kernel).
+# Bootloop guard: if the live kernel is already patched, do NOT label it
+# "stock" — a patched-as-stock backup bricks the next install AND the
+# Uninstaller restore path. Keep the old file (or nothing) instead.
 if [ -s "$BKDIR/stock-$TARGET_KIND$SLOT.img" ]; then
   ui_print "- Keeping existing stock backup"
-else
+elif kp_run -i kernel-origin -l 2>/dev/null | run_grep -qi "patched=false"; then
   run_cp -f "$WORK/boot.img" "$BKDIR/stock-$TARGET_KIND$SLOT.img" 2>/dev/null
+  ui_print "- Stock backup saved (verified stock)"
+else
+  ui_print "- WARNING: live kernel is already patched; NOT saving as stock."
+  ui_print "- Flash your stock boot.img via fastboot, or keep the old backup."
 fi
 mkdir -p /data/APatch-Backup 2>/dev/null
 if [ ! -s "/data/APatch-Backup/stock-$TARGET_KIND$SLOT.img" ]; then
-  run_cp -f "$WORK/boot.img" "/data/APatch-Backup/stock-$TARGET_KIND$SLOT.img" 2>/dev/null
+  if kp_run -i kernel-origin -l 2>/dev/null | run_grep -qi "patched=false"; then
+    run_cp -f "$WORK/boot.img" "/data/APatch-Backup/stock-$TARGET_KIND$SLOT.img" 2>/dev/null
+  fi
 fi
 # Remove stale key files from old keyed ZIPs (the key is a fixed constant
 # now; a leftover file only confuses).
@@ -396,17 +448,31 @@ fi
 if [ -f kernel-origin ]; then rm -f kernel-origin 2>/dev/null; fi
 mv kernel kernel-origin 2>/dev/null || abort "cannot stage kernel"
 
-# Clean patch logic: Always try to unpatch before patching to avoid key injection failure
+# Already-patched handler (bootloop guard).
+# - Same tool+version (superkey=su AND our kpimg compile_time): safe to
+#   refresh the patch in place (key already matches the app).
+# - Patched by ANOTHER tool/version (FolkPatch, other KP, custom key):
+#   NEVER re-patch or unpatch it with our kptools — cross-version patch
+#   metadata is incompatible and produces a non-booting kernel.
+#   Abort and tell the user to restore STOCK first.
 ui_print "- Checking for existing patches..."
 kp_run -i kernel-origin -l > "$WORK/vorig.log" 2>&1
 if grep -qi "patched=true" "$WORK/vorig.log"; then
-  ui_print "- Existing patch found, cleaning kernel for fresh root..."
-  kp_run -u -i kernel-origin -o kernel-clean >/dev/null 2>&1
-  if [ -s kernel-clean ]; then
-    mv -f kernel-clean kernel-origin
-    ui_print "- Kernel cleaned successfully"
+  if is_our_patch "$WORK/vorig.log"; then
+    ui_print "- Same APatch v1.x patch found; refreshing in place ..."
+    kp_run -u -i kernel-origin -o kernel-clean >/dev/null 2>&1
+    if [ -s kernel-clean ]; then
+      mv -f kernel-clean kernel-origin
+      ui_print "- Kernel cleaned successfully"
+    else
+      ui_print "- WARNING: Could not clean existing patch, continuing anyway"
+    fi
   else
-    ui_print "- WARNING: Could not clean existing patch, continuing anyway"
+    ui_print "- ERROR: kernel was patched by ANOTHER tool/version (not this ZIP)."
+    ui_print "- Re-patching it with this kptools/kpimg can BOOTLOOP the device."
+    ui_print "- Restore STOCK boot.img first (Uninstaller ZIP with a valid"
+    ui_print "  stock backup, or fastboot flash stock), then flash this ZIP."
+    abort "foreign patch detected - refusing to re-patch (bootloop guard)"
   fi
 fi
 
@@ -705,7 +771,7 @@ ui_print " Bootloop? Flash Uninstaller ZIP or restore stock backup."
 ui_print "****************************"
 # Persistent flash report on sdcard (survives reboot; user can send it).
 {
-  echo "APatch v1.0 flash report"
+  echo "APatch v1.1 flash report"
   echo "date: $(date 2>/dev/null)"
   echo "target: $TARGET_KIND ($TARGET)"
   echo "slot: $SLOT"

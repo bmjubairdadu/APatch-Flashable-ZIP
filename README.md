@@ -2,6 +2,11 @@
 
 **Recovery-flashable root (APatch 11224 / KernelPatch 0.13.8) for ARM64 Android — flash in TWRP/OrangeFox, reboot rooted.**
 
+> 🛡️ **v1.1 bootloop guards:** the installer refuses to re-patch a kernel
+> left by another tool, refuses a misnamed "stock" backup, and never
+> labels a patched kernel as stock. If it aborts with a guard message,
+> restore stock first — that abort **is** the bootloop prevention.
+
 Flash the Installer ZIP in custom recovery and get root immediately on reboot — no PC, no fastboot, no manual patching. Also included: a safe Boot Patcher (patch a stock `boot.img` without touching partitions) and an Uninstaller (restore stock kernel, remove root).
 
 > **Keywords:** APatch recovery flashable zip, APatch TWRP install, KernelPatch root zip, APatch OrangeFox sideload, `me.bmax.apatch` manager, Magisk alternative root, root without PC, boot.img patcher, KernelPatch 0.13.8.
@@ -16,9 +21,9 @@ Flash the Installer ZIP in custom recovery and get root immediately on reboot �
 
 | File | Use it when… |
 |---|---|
-| `APatch-v1.0-kp0.13.8-Recovery-Installer.zip` | You want root now: flash in recovery, reboot, done ✅ |
-| `APatch-v1.0-kp0.13.8-Boot-Patcher.zip` | You prefer fastboot: patch a stock `boot.img` on sdcard, flash from PC |
-| `APatch-v1.0-kp0.13.8-Uninstaller.zip` | You want to unroot: restores the stock kernel backup |
+| `APatch-v1.1-kp0.13.8-Recovery-Installer.zip` | You want root now: flash in recovery, reboot, done ✅ |
+| `APatch-v1.1-kp0.13.8-Boot-Patcher.zip` | You prefer fastboot: patch a stock `boot.img` on sdcard, flash from PC |
+| `APatch-v1.1-kp0.13.8-Uninstaller.zip` | You want to unroot: restores the stock kernel backup |
 | `SHA256SUMS.txt` | Verify downloads before flashing |
 
 All three ZIPs (plus checksums) are attached to every
@@ -50,7 +55,7 @@ patching those is invalid and unsupported).
 
 ## Method 1 — Recovery Installer (recommended, no PC)
 
-1. Copy `APatch-v1.0-kp0.13.8-Recovery-Installer.zip` to sdcard.
+1. Copy `APatch-v1.1-kp0.13.8-Recovery-Installer.zip` to sdcard.
 2. Boot into recovery → **Install** → select the ZIP (or `adb sideload` it).
 3. The installer will:
    - Detect your current boot partition and slot automatically
@@ -72,7 +77,7 @@ patching those is invalid and unsupported).
 
 1. Get your stock `boot.img` (firmware package or `adb pull /dev/block/by-name/boot`).
 2. Put it on sdcard as `APatch-stock-boot.img`.
-3. Flash `APatch-v1.0-kp0.13.8-Boot-Patcher.zip` in recovery.
+3. Flash `APatch-v1.1-kp0.13.8-Boot-Patcher.zip` in recovery.
    - Touches **no** partition. Output: `APatch-patched-boot.img` on sdcard.
 4. From PC:
    ```sh
@@ -88,7 +93,7 @@ patching those is invalid and unsupported).
 
 ## Uninstall / unroot
 
-Flash `APatch-v1.0-kp0.13.8-Uninstaller.zip` in recovery. It restores the
+Flash `APatch-v1.1-kp0.13.8-Uninstaller.zip` in recovery. It restores the
 stock backup if found, otherwise live-unpatches the kernel, and always
 removes the root daemon (`/data/adb/apd`, `/data/adb/ap/`).
 
@@ -102,7 +107,8 @@ removes the root daemon (`/data/adb/apd`, `/data/adb/ap/`).
 | App shows “Not installed” but `apd` runs | Manager APK signature mismatch — uninstall it, install `APatch-Manager.apk` from the ZIP, **reboot**, open the app again. |
 | `kernel requires CONFIG_KALLSYMS=y` | Your kernel can't be patched — root is impossible on this kernel. |
 | `new-boot.img missing` / repack failed | Missing `gzip` in recovery or corrupt download — re-download, verify SHA-256. |
-| Bootloop after flash | Restore: flash the Uninstaller ZIP, or fastboot-flash your stock `boot.img`. |
+| Bootloop after flash | You flashed over another tool's patch (FolkPatch/APatch mix) or a bad backup. Restore: flash the Uninstaller ZIP, or fastboot-flash your stock `boot.img`. v1.1+ refuses these cases up front. |
+| `foreign patch detected` / `not stock` abort | **Not a bug — the bootloop guard fired.** Restore stock (Uninstaller with valid backup, or fastboot stock), then flash again. Never rename a patched image as stock. |
 | `su: not found` in `adb shell` | Normal — APatch has no `/system/bin/su`. Grant root per app inside the Manager (Superuser page). |
 
 Still stuck? Open a [bug report](.github/ISSUE_TEMPLATE/bug_report.yml) with
@@ -164,7 +170,7 @@ symlinks to it, `busybox`/`kptools` are copies, `su_path` defaults to
 No binaries are committed. The build extracts everything from the official APK:
 
 ```sh
-python tools/build.py --tag v1.0-kp0.13.8
+python tools/build.py --tag v1.1-kp0.13.8
 # outputs: dist/*.zip + SHA256SUMS.txt (all git-ignored)
 ```
 

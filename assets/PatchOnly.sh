@@ -193,7 +193,7 @@ if ! kp_run -i kernel -f 2>/dev/null | run_grep -q "CONFIG_KALLSYMS=y"; then
 fi
 ui_print "- Kernel: CONFIG_KALLSYMS=y OK"
 if kp_run -i kernel -l 2>/dev/null | run_grep -qi "patched=true"; then
-  abort "source image already patched - use a STOCK boot.img"
+  abort "source image already patched (maybe by another tool) - use a STOCK boot.img, never a patched one (bootloop risk)"
 fi
 
 if [ "$BB_OK" = "1" ]; then "$BB" mv kernel kernel-origin 2>/dev/null || abort "cannot stage kernel"; else mv kernel kernel-origin 2>/dev/null || abort "cannot stage kernel"; fi

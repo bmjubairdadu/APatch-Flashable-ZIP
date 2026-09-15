@@ -116,6 +116,21 @@ run_grep() {
 }
 if [ "$BB_OK" = "1" ]; then "$BB" chmod 755 "$KPTOOLS" 2>/dev/null; fi
 
+# Bootloop guard helper (same rule as installer): live-unpatch is only safe
+# on a kernel patched by THIS tool+version. Foreign patches must be removed
+# by their own tool or a stock restore.
+OUR_KPCT=""
+is_our_patch() {
+  if [ -z "$KPIMG" ]; then KPIMG="$WORK/assets/kpimg"; fi
+  if [ -z "$OUR_KPCT" ]; then
+    OUR_KPCT=$(kp_run -l -k "$KPIMG" 2>/dev/null | run_grep -i "compile_time" | head -n 1 | cut -d= -f2- | tr -s ' ' | tr -d '\t\r\n')
+  fi
+  _sk=$(run_grep -i "^superkey=" "$1" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d ' \t\r\n')
+  _ct=$(run_grep -i "compile_time" "$1" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -s ' ' | tr -d '\t\r\n')
+  if [ "$_sk" = "su" ] && [ -n "$_ct" ] && [ -n "$OUR_KPCT" ] && [ "$_ct" = "$OUR_KPCT" ]; then return 0; fi
+  return 1
+}
+
 ui_print "****************************"
 ui_print " APatch Uninstaller"
 ui_print "****************************"
@@ -304,9 +319,16 @@ ui_print "- No stock backup found - live unpatching kernel ..."
 run_dd "if=$TARGET" of="$WORK/boot.img" bs=1048576 2>"$WORK/dd_read.log" || abort "cannot read $TARGET"
 kp_run unpack boot.img >"$WORK/unpack.log" 2>&1 || abort "unpack failed"
 if [ ! -f kernel ]; then abort "no kernel after unpack"; fi
-if kp_run -i kernel -l 2>/dev/null | run_grep -qi "patched=false"; then
+kp_run -i kernel -l >"$WORK/ulist.log" 2>&1
+if run_grep -qi "patched=false" "$WORK/ulist.log"; then
   ui_print "- Kernel is already stock. Reboot."
   exit 0
+fi
+if ! is_our_patch "$WORK/ulist.log"; then
+  ui_print "- ERROR: kernel was patched by ANOTHER tool/version."
+  ui_print "- Live-unpatch with this kptools can corrupt it (bootloop)."
+  ui_print "- Use that tool's Uninstaller, or restore a stock backup."
+  abort "foreign patch - refusing live-unpatch (bootloop guard)"
 fi
 if [ "$BB_OK" = "1" ]; then "$BB" mv kernel kernel-origin 2>/dev/null || abort "cannot stage kernel"; else mv kernel kernel-origin 2>/dev/null || abort "cannot stage kernel"; fi
 kp_run -u -i kernel-origin -o kernel >"$WORK/unpatch.log" 2>&1
